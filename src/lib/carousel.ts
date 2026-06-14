@@ -1,4 +1,7 @@
 export type Style = 'expert' | 'selling' | 'teaching' | 'viral';
+export type Platform = 'instagram' | 'telegram' | 'vk';
+
+export const GENERATE_URL = 'https://functions.poehali.dev/95afa1a5-21d5-4436-a6a1-223e48de5cf7';
 
 export interface Slide {
   index: number;
@@ -12,11 +15,47 @@ export interface Carousel {
   id: string;
   topic: string;
   style: Style;
+  platform: Platform;
   createdAt: number;
   hook: string;
   slides: Slide[];
   cta: string;
   codeWord: string;
+}
+
+export const PLATFORMS: { key: Platform; label: string; icon: string }[] = [
+  { key: 'instagram', label: 'Instagram', icon: 'Instagram' },
+  { key: 'telegram', label: 'Telegram', icon: 'Send' },
+  { key: 'vk', label: 'VK', icon: 'MessageCircle' },
+];
+
+export async function generateCarouselAI(
+  topic: string,
+  style: Style,
+  platform: Platform,
+  count = 7
+): Promise<Carousel> {
+  const res = await fetch(GENERATE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, style, platform, count }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка генерации');
+  }
+  const data = await res.json();
+  return {
+    id: Math.random().toString(36).slice(2),
+    topic: data.topic,
+    style: data.style,
+    platform: data.platform,
+    createdAt: Date.now(),
+    hook: data.hook,
+    slides: data.slides,
+    cta: data.cta,
+    codeWord: data.codeWord,
+  };
 }
 
 export const STYLES: { key: Style; label: string; emoji: string; desc: string }[] = [
@@ -116,7 +155,7 @@ const CODE_WORDS = ['СТАРТ', 'ГАЙД', 'ХОЧУ', 'ОГОНЬ', 'ДАЙ'
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
-export function generateCarousel(topic: string, style: Style, count = 7): Carousel {
+export function generateCarousel(topic: string, style: Style, count = 7, platform: Platform = 'instagram'): Carousel {
   const t = topic.trim() || 'твоя тема';
   const hooks = HOOKS[style](t);
   const texts = SLIDE_TEXTS[style](t);
@@ -144,6 +183,7 @@ export function generateCarousel(topic: string, style: Style, count = 7): Carous
     id: Math.random().toString(36).slice(2),
     topic: t,
     style,
+    platform,
     createdAt: Date.now(),
     hook,
     slides,

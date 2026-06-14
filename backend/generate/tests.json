@@ -1,0 +1,17 @@
+{
+  "tests": [
+    {
+      "name": "CORS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Empty topic returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {"topic": "", "style": "viral", "platform": "instagram"},
+      "expectedStatus": 400
+    }
+  ]
+}

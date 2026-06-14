@@ -4,9 +4,12 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import {
   generateCarousel,
+  generateCarouselAI,
   STYLES,
+  PLATFORMS,
   EXAMPLES,
   type Style,
+  type Platform,
   type Carousel,
 } from '@/lib/carousel';
 
@@ -30,24 +33,34 @@ const Index = () => {
   const [tab, setTab] = useState<Tab>('generator');
   const [topic, setTopic] = useState('');
   const [style, setStyle] = useState<Style>('viral');
+  const [platform, setPlatform] = useState<Platform>('instagram');
   const [slideCount, setSlideCount] = useState(7);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Carousel | null>(null);
   const [history, setHistory] = useState<Carousel[]>([]);
 
-  const run = (t: string, s: Style) => {
+  const run = async (t: string, s: Style, p: Platform = platform) => {
     if (!t.trim()) {
       toast({ title: 'Введите тему', description: 'Например: нейросети, маркетинг, продажи' });
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const c = generateCarousel(t, s, slideCount);
+    setTab('generator');
+    try {
+      const c = await generateCarouselAI(t, s, p, slideCount);
       setResult(c);
       setHistory((h) => [c, ...h].slice(0, 30));
+    } catch (e) {
+      const c = generateCarousel(t, s, slideCount, p);
+      setResult(c);
+      setHistory((h) => [c, ...h].slice(0, 30));
+      toast({
+        title: 'AI временно недоступен',
+        description: e instanceof Error ? e.message : 'Показана базовая версия карусели',
+      });
+    } finally {
       setLoading(false);
-      setTab('generator');
-    }, 650);
+    }
   };
 
   return (
@@ -108,6 +121,8 @@ const Index = () => {
             setTopic={setTopic}
             style={style}
             setStyle={setStyle}
+            platform={platform}
+            setPlatform={setPlatform}
             loading={loading}
             result={result}
             onRun={() => run(topic, style)}
@@ -139,11 +154,13 @@ function GeneratorTab(props: {
   setTopic: (v: string) => void;
   style: Style;
   setStyle: (v: Style) => void;
+  platform: Platform;
+  setPlatform: (v: Platform) => void;
   loading: boolean;
   result: Carousel | null;
   onRun: () => void;
 }) {
-  const { topic, setTopic, style, setStyle, loading, result, onRun } = props;
+  const { topic, setTopic, style, setStyle, platform, setPlatform, loading, result, onRun } = props;
 
   return (
     <div className="space-y-10">
@@ -153,10 +170,10 @@ function GeneratorTab(props: {
           <Icon name="Zap" size={14} /> Генерация за секунды
         </span>
         <h1 className="mt-5 font-display text-4xl md:text-6xl font-extrabold leading-tight">
-          Вирусные карусели <span className="gradient-text">для Instagram</span>
+          Вирусные карусели <span className="gradient-text">с искусственным интеллектом</span>
         </h1>
         <p className="mt-4 text-base md:text-lg text-slate-500">
-          Введи тему — получишь заголовок, 7 слайдов, идеи визуала, призыв и готовые промпты для нейросетей.
+          Введи только тему — AI напишет уникальный заголовок, тексты слайдов, идеи визуала, призыв, кодовое слово и промпты для нейросетей.
         </p>
 
         <div className="mt-8 glass rounded-3xl p-2 shadow-xl shadow-violet-500/10 ring-1 ring-white/60">
@@ -181,7 +198,7 @@ function GeneratorTab(props: {
               ) : (
                 <Icon name="Sparkles" size={18} />
               )}
-              {loading ? 'Создаю…' : 'Сгенерировать'}
+              {loading ? 'AI создаёт…' : 'Сгенерировать'}
             </Button>
           </div>
         </div>
@@ -202,14 +219,47 @@ function GeneratorTab(props: {
             </button>
           ))}
         </div>
+
+        {/* platform selector */}
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <span className="text-xs font-semibold text-slate-400">Площадка:</span>
+          <div className="inline-flex gap-1 rounded-2xl bg-white/70 p-1 shadow-sm">
+            {PLATFORMS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setPlatform(p.key)}
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold transition-all ${
+                  platform === p.key ? 'gradient-brand text-white shadow' : 'text-slate-600 hover:bg-white'
+                }`}
+              >
+                <Icon name={p.icon} size={14} fallback="Share2" />
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* Result */}
-      {result ? (
+      {loading && !result ? (
+        <LoadingState />
+      ) : result ? (
         <ResultView result={result} onRegenerate={onRun} loading={loading} />
       ) : (
         <EmptyState />
       )}
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="mx-auto max-w-md text-center py-12 animate-fade-in">
+      <div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl gradient-brand animate-gradient-shift">
+        <Icon name="Loader2" size={32} className="text-white animate-spin" />
+      </div>
+      <p className="mt-4 font-display text-lg font-bold">AI создаёт твою карусель…</p>
+      <p className="mt-1 text-sm text-slate-500">Заголовок, тексты, визуалы и промпты — пара секунд</p>
     </div>
   );
 }
@@ -228,8 +278,9 @@ function EmptyState() {
 
 function ResultView({ result, onRegenerate, loading }: { result: Carousel; onRegenerate: () => void; loading: boolean }) {
   const sl = styleLabel(result.style);
+  const pl = PLATFORMS.find((p) => p.key === result.platform);
   const fullText =
-    `Тема: ${result.topic}\nСтиль: ${sl.label}\n\n` +
+    `Тема: ${result.topic}\nСтиль: ${sl.label}\nПлощадка: ${pl?.label ?? ''}\n\n` +
     result.slides.map((s) => `Слайд ${s.index + 1} — ${s.role}\n${s.text}\nВизуал: ${s.visualIdea}\nПромпт: ${s.prompt}`).join('\n\n') +
     `\n\nCTA: ${result.cta}\nКодовое слово: ${result.codeWord}`;
 
@@ -239,7 +290,9 @@ function ResultView({ result, onRegenerate, loading }: { result: Carousel; onReg
         <div>
           <h2 className="font-display text-2xl font-extrabold">Карусель готова 🎉</h2>
           <p className="text-sm text-slate-500">
-            Тема «{result.topic}» · стиль {sl.emoji} {sl.label} · {result.slides.length} слайдов
+            Тема «{result.topic}» · стиль {sl.emoji} {sl.label}
+            {pl && <> · <Icon name={pl.icon} size={13} fallback="Share2" className="inline -mt-0.5" /> {pl.label}</>}
+            {' '}· {result.slides.length} слайдов
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
